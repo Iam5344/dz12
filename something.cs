@@ -1,139 +1,247 @@
 using Microsoft.EntityFrameworkCore;
 
+// Entities
 public class Group
 {
     public int Id { get; set; }
     public string Name { get; set; } = null!;
-    public ICollection<Student> Students { get; set; } = new List<Student>();
+    public List<Student> Students { get; set; } = new();
 }
 
 public class Student
 {
     public int Id { get; set; }
-    public string Name { get; set; } = null!;
-    public string Email { get; set; } = null!;
-    public decimal Stipend { get; set; }
+    public string FullName { get; set; } = null!;
     public int GroupId { get; set; }
     public Group Group { get; set; } = null!;
-    public Passport? Passport { get; set; }
-}
-
-public class Passport
-{
-    public int Id { get; set; }
-    public string PassportNumber { get; set; } = null!;
-    public int StudentId { get; set; }
-    public Student Student { get; set; } = null!;
 }
 
 public class Teacher
 {
     public int Id { get; set; }
-    public string Name { get; set; } = null!;
-    public decimal Salary { get; set; }
-    public ICollection<Subject> Subjects { get; set; } = new List<Subject>();
+    public string FullName { get; set; } = null!;
+    public List<Subject> Subjects { get; set; } = new();
 }
 
 public class Subject
 {
     public int Id { get; set; }
     public string Name { get; set; } = null!;
-    public string? Description { get; set; }
     public int TeacherId { get; set; }
     public Teacher Teacher { get; set; } = null!;
-    public int DepartmentId { get; set; }
-    public Department Department { get; set; } = null!;
 }
 
-public class Department
+public class TeacherSubjectView
 {
-    public int Id { get; set; }
-    public string Name { get; set; } = null!;
-    public ICollection<Subject> Subjects { get; set; } = new List<Subject>();
+    public string TeacherName { get; set; } = null!;
+    public string SubjectName { get; set; } = null!;
 }
-
-public class AppContext : DbContext
+public class AppDbContext : DbContext
 {
     public DbSet<Group> Groups { get; set; }
     public DbSet<Student> Students { get; set; }
-    public DbSet<Passport> Passports { get; set; }
     public DbSet<Teacher> Teachers { get; set; }
     public DbSet<Subject> Subjects { get; set; }
-    public DbSet<Department> Departments { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
-        options.UseSqlServer("Data Source=DESKTOP-8UTPR8Q\\IAM5344;Initial Catalog=AcademyDb;Integrated Security=True;Encrypt=False;");
+        options.UseSqlServer("Data Source=DESKTOP-8UTPR8Q\\IAM5344;Initial Catalog=SchoolDb;Integrated Security=True;Encrypt=False;");
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Group>().Property(g => g.Name).HasMaxLength(10).IsRequired();
+        modelBuilder.Entity<Subject>()
+            .HasOne(s => s.Teacher)
+            .WithMany(t => t.Subjects)
+            .HasForeignKey(s => s.TeacherId);
 
-        modelBuilder.Entity<Student>().Property(s => s.Name).HasMaxLength(50);
-        modelBuilder.Entity<Student>().Property(s => s.Email).IsRequired();
-        modelBuilder.Entity<Student>().HasIndex(s => s.Email).IsUnique();
-        modelBuilder.Entity<Student>().Property(s => s.Stipend).HasColumnType("decimal(6,2)");
-        modelBuilder.Entity<Student>().HasOne(s => s.Group).WithMany(g => g.Students).HasForeignKey(s => s.GroupId);
-        modelBuilder.Entity<Student>().HasOne(s => s.Passport).WithOne(p => p.Student).HasForeignKey<Passport>(p => p.StudentId);
+        modelBuilder.Entity<Student>()
+            .HasOne(s => s.Group)
+            .WithMany(g => g.Students)
+            .HasForeignKey(s => s.GroupId);
 
-        modelBuilder.Entity<Passport>().Property(p => p.PassportNumber).HasMaxLength(9).IsRequired();
-
-        modelBuilder.Entity<Teacher>().Property(t => t.Salary).HasColumnType("decimal(8,2)").HasDefaultValue(25000);
-        modelBuilder.Entity<Teacher>().Property(t => t.Name).HasMaxLength(50).IsRequired();
-
-        modelBuilder.Entity<Subject>().Property(s => s.Name).HasMaxLength(50).IsRequired();
-        modelBuilder.Entity<Subject>().Property(s => s.Description).IsRequired(false);
-        modelBuilder.Entity<Subject>().HasOne(s => s.Teacher).WithMany(t => t.Subjects).HasForeignKey(s => s.TeacherId);
-        modelBuilder.Entity<Subject>().HasOne(s => s.Department).WithMany(d => d.Subjects).HasForeignKey(s => s.DepartmentId);
-
-        modelBuilder.Entity<Department>().Property(d => d.Name).HasMaxLength(50).IsRequired();
+        modelBuilder.Entity<TeacherSubjectView>()
+            .HasNoKey()
+            .ToView("TeacherSubjectsView");
     }
 }
 
 class Program
 {
+    static AppDbContext db = new AppDbContext();
+
     static void Main(string[] args)
     {
-        using var db = new AppContext();
-        db.Database.EnsureCreated();
-        var department = new Department { Name = "IT" };
-        db.Departments.Add(department);
-        db.SaveChanges();
+        db.Database.Migrate();
 
-        var teacher = new Teacher { Name = "Іван Іванов", Salary = 30000 };
-        db.Teachers.Add(teacher);
-        db.SaveChanges();
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'TeacherSubjectsView')
+            EXEC('CREATE VIEW TeacherSubjectsView AS
+                SELECT T.FullName AS TeacherName, S.Name AS SubjectName
+                FROM Teachers T
+                INNER JOIN Subjects S ON T.Id = S.TeacherId')");
 
-        var subject = new Subject { Name = "Math", TeacherId = teacher.Id, DepartmentId = department.Id };
-        db.Subjects.Add(subject);
-        db.SaveChanges();
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.procedures WHERE name = 'AddTeacher')
+            EXEC('CREATE PROCEDURE AddTeacher @FullName NVARCHAR(MAX)
+                AS BEGIN
+                    INSERT INTO Teachers (FullName) VALUES (@FullName)
+                END')");
 
-        var group = new Group { Name = "Group-1" };
-        db.Groups.Add(group);
-        db.SaveChanges();
+        while (true)
+        {
+            Console.WriteLine("\n1. Групи");
+            Console.WriteLine("2. Студенти");
+            Console.WriteLine("3. Викладачі");
+            Console.WriteLine("4. Предмети");
+            Console.WriteLine("5. Подання викладачі/предмети");
+            Console.WriteLine("0. Вихід");
+            Console.Write("Вибір: ");
+            string choice = Console.ReadLine();
 
-        var student = new Student { Name = "Петро Петров", Email = "petro@gmail.com", Stipend = 1500, GroupId = group.Id };
-        db.Students.Add(student);
-        db.SaveChanges();
+            if (choice == "1") GroupsMenu();
+            else if (choice == "2") StudentsMenu();
+            else if (choice == "3") TeachersMenu();
+            else if (choice == "4") SubjectsMenu();
+            else if (choice == "5")
+            {
+                foreach (var v in db.Set<TeacherSubjectView>().FromSqlRaw("SELECT * FROM TeacherSubjectsView"))
+                    Console.WriteLine($"{v.TeacherName} | {v.SubjectName}");
+            }
+            else if (choice == "0") return;
+        }
+    }
 
-        var passport = new Passport { PassportNumber = "123456789", StudentId = student.Id };
-        db.Passports.Add(passport);
-        db.SaveChanges();
+    static void GroupsMenu()
+    {
+        Console.WriteLine("\n1. Додати 2. Показати 3. Оновити 4. Видалити");
+        Console.Write("Вибір: ");
+        string c = Console.ReadLine();
 
-        Console.WriteLine("Групи:"); 
-        foreach (var g in db.Groups) Console.WriteLine($"{g.Id} | {g.Name}");
+        if (c == "1")
+        {
+            Console.Write("Назва: "); string name = Console.ReadLine();
+            db.Groups.Add(new Group { Name = name });
+            db.SaveChanges();
+        }
+        else if (c == "2")
+        {
+            foreach (var g in db.Groups)
+                Console.WriteLine($"{g.Id} | {g.Name}");
+        }
+        else if (c == "3")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var g = db.Groups.Find(id);
+            Console.Write("Нова назва: "); g.Name = Console.ReadLine();
+            db.SaveChanges();
+        }
+        else if (c == "4")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var g = db.Groups.Find(id);
+            db.Groups.Remove(g);
+            db.SaveChanges();
+        }
+    }
 
-        Console.WriteLine("Студенти:");
-        foreach (var s in db.Students) Console.WriteLine($"{s.Id} | {s.Name} | {s.Email}");
+    static void StudentsMenu()
+    {
+        Console.WriteLine("\n1. Додати 2. Показати 3. Оновити 4. Видалити");
+        Console.Write("Вибір: ");
+        string c = Console.ReadLine();
 
-        Console.WriteLine("Викладачі:");
-        foreach (var t in db.Teachers) Console.WriteLine($"{t.Id} | {t.Name} | {t.Salary}");
+        if (c == "1")
+        {
+            Console.Write("ПІБ: "); string name = Console.ReadLine();
+            Console.Write("ID групи: "); int groupId = int.Parse(Console.ReadLine());
+            db.Students.Add(new Student { FullName = name, GroupId = groupId });
+            db.SaveChanges();
+        }
+        else if (c == "2")
+        {
+            foreach (var s in db.Students.Include(s => s.Group))
+                Console.WriteLine($"{s.Id} | {s.FullName} | {s.Group.Name}");
+        }
+        else if (c == "3")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var s = db.Students.Find(id);
+            Console.Write("Нове ПІБ: "); s.FullName = Console.ReadLine();
+            db.SaveChanges();
+        }
+        else if (c == "4")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var s = db.Students.Find(id);
+            db.Students.Remove(s);
+            db.SaveChanges();
+        }
+    }
 
-        Console.WriteLine("Кафедри:");
-        foreach (var d in db.Departments) Console.WriteLine($"{d.Id} | {d.Name}");
+    static void TeachersMenu()
+    {
+        Console.WriteLine("\n1. Додати 2. Показати 3. Оновити 4. Видалити");
+        Console.Write("Вибір: ");
+        string c = Console.ReadLine();
 
-        Console.WriteLine("Предмети:");
-        foreach (var s in db.Subjects) Console.WriteLine($"{s.Id} | {s.Name}");
+        if (c == "1")
+        {
+            Console.Write("ПІБ: "); string name = Console.ReadLine();
+            db.Database.ExecuteSqlRaw("EXEC AddTeacher @p0", name);
+        }
+        else if (c == "2")
+        {
+            foreach (var t in db.Teachers)
+                Console.WriteLine($"{t.Id} | {t.FullName}");
+        }
+        else if (c == "3")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var t = db.Teachers.Find(id);
+            Console.Write("Нове ПІБ: "); t.FullName = Console.ReadLine();
+            db.SaveChanges();
+        }
+        else if (c == "4")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var t = db.Teachers.Find(id);
+            db.Teachers.Remove(t);
+            db.SaveChanges();
+        }
+    }
+
+    static void SubjectsMenu()
+    {
+        Console.WriteLine("\n1. Додати 2. Показати 3. Оновити 4. Видалити");
+        Console.Write("Вибір: ");
+        string c = Console.ReadLine();
+
+        if (c == "1")
+        {
+            Console.Write("Назва: "); string name = Console.ReadLine();
+            Console.Write("ID викладача: "); int teacherId = int.Parse(Console.ReadLine());
+            db.Subjects.Add(new Subject { Name = name, TeacherId = teacherId });
+            db.SaveChanges();
+        }
+        else if (c == "2")
+        {
+            foreach (var s in db.Subjects.Include(s => s.Teacher))
+                Console.WriteLine($"{s.Id} | {s.Name} | {s.Teacher.FullName}");
+        }
+        else if (c == "3")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var s = db.Subjects.Find(id);
+            Console.Write("Нова назва: "); s.Name = Console.ReadLine();
+            db.SaveChanges();
+        }
+        else if (c == "4")
+        {
+            Console.Write("ID: "); int id = int.Parse(Console.ReadLine());
+            var s = db.Subjects.Find(id);
+            db.Subjects.Remove(s);
+            db.SaveChanges();
+        }
     }
 }
