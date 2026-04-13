@@ -1,85 +1,52 @@
-using Microsoft.Data.SqlClient;
-using Dapper;
+using System;
+using System.Runtime.InteropServices;
+
+class NativeMethods
+{
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool Beep(uint dwFreq, uint dwDuration);
+
+    [DllImport("user32.dll")]
+    public static extern bool MessageBeep(uint uType);
+}
 
 class Program
 {
-    static string cs = "Data Source=DESKTOP-8UTPR8Q\\IAM5344;Initial Catalog=LibraryDb;Integrated Security=True;Encrypt=False;";
-
     static void Main()
     {
-        using var con = new SqlConnection(cs);
-        con.Open();
+        NativeMethods.MessageBox(IntPtr.Zero, "Ім'я: Глеб", "Інформація про мене", 0);
+        NativeMethods.MessageBox(IntPtr.Zero, "Вік: 18", "Інформація про мене", 0);
+        NativeMethods.MessageBox(IntPtr.Zero, "Спеціальність: Програмування", "Інформація про мене", 0);
 
-        con.Execute(@"
-            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Books' AND xtype='U')
-            CREATE TABLE Books (
-                Id INT PRIMARY KEY IDENTITY(1,1),
-                Title NVARCHAR(200) NOT NULL,
-                Author NVARCHAR(200) NOT NULL
-            )");
+        NativeMethods.Beep(500, 300);
+        System.Threading.Thread.Sleep(500);
+        NativeMethods.Beep(1000, 300);
+        System.Threading.Thread.Sleep(500);
 
-        while (true)
-        {
-            Console.WriteLine("\n1. Додати книгу");
-            Console.WriteLine("2. Всі книги");
-            Console.WriteLine("3. Пошук за назвою");
-            Console.WriteLine("4. Пошук за автором");
-            Console.WriteLine("5. Пошук за Id");
-            Console.WriteLine("6. Видалити за Id");
-            Console.WriteLine("7. Оновити за Id");
-            Console.WriteLine("0. Вихід");
-            Console.Write("Вибір: ");
-            string choice = Console.ReadLine();
+        NativeMethods.Beep(1500, 300);
+        System.Threading.Thread.Sleep(500);
 
-            if (choice == "1")
-            {
-                Console.Write("Назва: "); string title = Console.ReadLine();
-                Console.Write("Автор: "); string author = Console.ReadLine();
-                con.Execute("INSERT INTO Books (Title, Author) VALUES (@Title, @Author)",
-                    new { Title = title, Author = author });
-                Console.WriteLine("Додано.");
-            }
-            else if (choice == "2")
-            {
-                PrintBooks(con.Query("SELECT * FROM Books"));
-            }
-            else if (choice == "3")
-            {
-                Console.Write("Назва: "); string title = Console.ReadLine();
-                PrintBooks(con.Query("SELECT * FROM Books WHERE Title = @Title", new { Title = title }));
-            }
-            else if (choice == "4")
-            {
-                Console.Write("Автор: "); string author = Console.ReadLine();
-                PrintBooks(con.Query("SELECT * FROM Books WHERE Author = @Author", new { Author = author }));
-            }
-            else if (choice == "5")
-            {
-                Console.Write("Id: "); int id = int.Parse(Console.ReadLine());
-                PrintBooks(con.Query("SELECT * FROM Books WHERE Id = @Id", new { Id = id }));
-            }
-            else if (choice == "6")
-            {
-                Console.Write("Id: "); int id = int.Parse(Console.ReadLine());
-                con.Execute("DELETE FROM Books WHERE Id = @Id", new { Id = id });
-                Console.WriteLine("Видалено.");
-            }
-            else if (choice == "7")
-            {
-                Console.Write("Id: "); int id = int.Parse(Console.ReadLine());
-                Console.Write("Нова назва: "); string title = Console.ReadLine();
-                Console.Write("Новий автор: "); string author = Console.ReadLine();
-                con.Execute("UPDATE Books SET Title = @Title, Author = @Author WHERE Id = @Id",
-                    new { Title = title, Author = author, Id = id });
-                Console.WriteLine("Оновлено.");
-            }
-            else if (choice == "0") return;
-        }
-    }
+        NativeMethods.Beep(2000, 300);
+        System.Threading.Thread.Sleep(500);
 
-    static void PrintBooks(IEnumerable<dynamic> books)
-    {
-        foreach (var b in books)
-            Console.WriteLine($"{b.Id} | {b.Title} | {b.Author}");
+        NativeMethods.Beep(2500, 300);
+        System.Threading.Thread.Sleep(500);
+
+        NativeMethods.MessageBeep(0x00000000);
+        System.Threading.Thread.Sleep(500);
+
+        NativeMethods.MessageBeep(0x00000010);
+        System.Threading.Thread.Sleep(500);
+
+        NativeMethods.MessageBeep(0x00000020);
+        System.Threading.Thread.Sleep(500);
+
+        NativeMethods.MessageBeep(0x00000030);
+        System.Threading.Thread.Sleep(500);
+
+        NativeMethods.MessageBeep(0x00000040);
     }
 }
