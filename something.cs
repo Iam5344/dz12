@@ -1,52 +1,64 @@
-using System;
-using System.Runtime.InteropServices;
+using System.Diagnostics;
 
-class NativeMethods
+namespace WinFormsApp5;
+
+public partial class Form1 : Form
 {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
-
-    [DllImport("kernel32.dll")]
-    public static extern bool Beep(uint dwFreq, uint dwDuration);
-
-    [DllImport("user32.dll")]
-    public static extern bool MessageBeep(uint uType);
-}
-
-class Program
-{
-    static void Main()
+    public Form1()
     {
-        NativeMethods.MessageBox(IntPtr.Zero, "Ім'я: Глеб", "Інформація про мене", 0);
-        NativeMethods.MessageBox(IntPtr.Zero, "Вік: 18", "Інформація про мене", 0);
-        NativeMethods.MessageBox(IntPtr.Zero, "Спеціальність: Програмування", "Інформація про мене", 0);
+        InitializeComponent();
+        LoadProcesses();
+    }
 
-        NativeMethods.Beep(500, 300);
-        System.Threading.Thread.Sleep(500);
-        NativeMethods.Beep(1000, 300);
-        System.Threading.Thread.Sleep(500);
+    private void LoadProcesses()
+    {
+        listBox1.Items.Clear();
+        foreach (Process p in Process.GetProcesses())
+            listBox1.Items.Add(p.ProcessName + " | PID: " + p.Id);
+    }
 
-        NativeMethods.Beep(1500, 300);
-        System.Threading.Thread.Sleep(500);
+    private void timer1_Tick(object sender, EventArgs e)
+    {
+        LoadProcesses();
+    }
 
-        NativeMethods.Beep(2000, 300);
-        System.Threading.Thread.Sleep(500);
+    private void numericUpDown1_ValueChanged(object sender, EventArgs e)
+    {
+        timer1.Interval = (int)(numericUpDown1.Value * 1000);
+    }
 
-        NativeMethods.Beep(2500, 300);
-        System.Threading.Thread.Sleep(500);
+    private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        if (listBox1.SelectedItem == null) return;
 
-        NativeMethods.MessageBeep(0x00000000);
-        System.Threading.Thread.Sleep(500);
+        string selected = listBox1.SelectedItem.ToString();
+        int pid = int.Parse(selected.Split("PID: ")[1]);
 
-        NativeMethods.MessageBeep(0x00000010);
-        System.Threading.Thread.Sleep(500);
+        Process p = Process.GetProcessById(pid);
+        p.Refresh();
 
-        NativeMethods.MessageBeep(0x00000020);
-        System.Threading.Thread.Sleep(500);
+        label1.Text = "PID: " + p.Id;
+        label2.Text = "Потоків: " + p.Threads.Count;
+        label3.Text = "Копій: " + Process.GetProcessesByName(p.ProcessName).Length;
 
-        NativeMethods.MessageBeep(0x00000030);
-        System.Threading.Thread.Sleep(500);
+        try { label4.Text = "Старт: " + p.StartTime.ToString("HH:mm:ss"); }
+        catch { label4.Text = "Старт: недоступно"; }
 
-        NativeMethods.MessageBeep(0x00000040);
+        try { label5.Text = "CPU: " + p.TotalProcessorTime.ToString(@"hh\:mm\:ss"); }
+        catch { label5.Text = "CPU: недоступно"; }
+
+        button1.Enabled = true;
+        button1.Tag = pid;
+    }
+
+    private void button1_Click(object sender, EventArgs e)
+    {
+        int pid = (int)button1.Tag;
+        if (MessageBox.Show("Завершити процес PID " + pid + "?", "Підтвердження",
+            MessageBoxButtons.YesNo) == DialogResult.Yes)
+        {
+            Process.GetProcessById(pid).Kill();
+            LoadProcesses();
+        }
     }
 }
